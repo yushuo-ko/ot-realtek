@@ -38,7 +38,6 @@ void __wrap_otInstanceResetRadioStack(otInstance *aInstance)
 {
 #ifdef BUILD_USB
     uint8_t pan_idx = mpan_GetCurrentPANIdx();
-    OT_UNUSED_VARIABLE(aInstance);
     if (pan_idx == 0)
     {
         gPlatformPseudoResetLevel++;
@@ -47,7 +46,7 @@ void __wrap_otInstanceResetRadioStack(otInstance *aInstance)
     {
         gPlatformPseudoResetLevel_zb++;
     }
-    otTaskletsSignalPending(NULL);
+    otTaskletsSignalPending(aInstance);
 #else
     OT_UNUSED_VARIABLE(aInstance);
     WDG_SystemReset(RESET_ALL, SW_RESET_APP_END);
@@ -56,8 +55,23 @@ void __wrap_otInstanceResetRadioStack(otInstance *aInstance)
 
 void otPlatReset(otInstance *aInstance)
 {
+#ifdef BUILD_USB
+    // On the USB dongles a hard reset would drop the USB connection and the host
+    // would have to re-enumerate the device, so perform a pseudo reset instead.
+    uint8_t pan_idx = mpan_GetCurrentPANIdx();
+    if (pan_idx == 0)
+    {
+        gPlatformPseudoResetLevel++;
+    }
+    else
+    {
+        gPlatformPseudoResetLevel_zb++;
+    }
+    otTaskletsSignalPending(aInstance);
+#else
     OT_UNUSED_VARIABLE(aInstance);
     WDG_SystemReset(RESET_ALL, SW_RESET_APP_END);
+#endif
 }
 
 otPlatResetReason otPlatGetResetReason(otInstance *aInstance)

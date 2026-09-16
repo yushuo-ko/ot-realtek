@@ -240,14 +240,14 @@ extern uint32_t (*lowerstack_SystemCall)(uint32_t opcode, uint32_t param, uint32
                                          uint32_t param2);
 extern void set_zigbee_priority(uint16_t priority, int16_t priority_min);
 extern uint32_t get_zigbee_window_slot_imp(int16_t *prio, int16_t *prio_min);
-extern void (*modem_set_zb_cca_combination)(uint8_t comb);
+extern void modem_set_zb_cca_combination_rom(uint8_t comb);
 
 mac_attribute_t attr;
 mac_driver_t drv;
 pan_mac_comm_t pan_mac_comm;
 pan_mac_t pan_mac[MAX_PAN_NUM];
 
-extern void mac_SetTxNCsma(bool enable);
+extern void mac_Initialize_rtl87x2g(mac_driver_t *ptr_drv, mac_attribute_t *attribute);
 void zb_mac_drv_init(void)
 {
     mac_InitAttribute(&attr);
@@ -260,7 +260,7 @@ void zb_mac_drv_init(void)
     lowerstack_SystemCall(10, 1, 512, -1);
 #endif
     mac_Enable();
-    mac_Initialize(&drv, &attr);
+    mac_Initialize_rtl87x2g(&drv, &attr);
     mac_Initialize_Additional();
 }
 
@@ -274,7 +274,7 @@ void zb_mac_drv_enable(void)
     zb_mac_drv_init();
     mac_RegisterBtHciResetHanlder(zb_mac_drv_init);
     mac_RegisterCallback(NULL, edscan_level2dbm, set_zigbee_priority,
-                         *modem_set_zb_cca_combination);
+                         modem_set_zb_cca_combination_rom);
     mac_SetCcaMode(MAC_CCA_CS_ED);
     tx_power_default = mac_GetTXPower_patch();
     mac_SetTXPower_patch(tx_power_default);
@@ -434,83 +434,8 @@ void *__wrap_memset(void *dst0, int Val, size_t length)
     return (dst0);
 }
 
-#include <string.h>
-#include "os_mem.h"
-
-APP_FLASH_TEXT_SECTION void *__wrap__malloc_r(struct _reent *ptr, size_t size)
-{
-    void *mem;
-    mem = os_mem_alloc(RAM_TYPE_DATA_ON, size);
-    return mem;
-}
-
-APP_FLASH_TEXT_SECTION void __wrap__free_r(struct _reent *ptr, void *addr)
-{
-    os_mem_free(addr);
-}
-
-/**
- * @warning This realloc implementation has critical limitations due to os_mem API constraints.
- *
- * PROBLEM:
- *   The underlying os_mem_alloc API does not provide a way to retrieve the original
- *   allocation size. Standard realloc should copy min(oldsize, newsize) bytes, but
- *   oldsize is unknown.
- *
- * CURRENT USAGE STATUS (as of analysis):
- *   - OpenThread core: Does NOT use realloc (only uses Heap::CAlloc/Free)
- *   - mbedtls: Implements its own safe resize_buffer() that correctly handles sizes
- *   - Result: This function should never be called in practice
- *
- * IMPLEMENTATION DECISION:
- *   This implementation returns NULL (allocation failure) for resize attempts to
- *   prevent potential buffer over-read vulnerabilities. This is safer than:
- *   - Copying newsize bytes (buffer over-read if newsize > oldsize)
- *   - Copying arbitrary amount (data loss if amount < min(oldsize, newsize))
- *
- * RATIONALE:
- *   Explicit failure is better than silent memory corruption or undefined behavior.
- *   If this causes issues, the caller should implement size tracking like mbedtls does.
- *
- * @param ptr     Reentrant structure (unused)
- * @param mem     Pointer to previously allocated memory, or NULL
- * @param newsize New size in bytes, or 0 to free
- * @return        Pointer to allocated memory, or NULL on failure
- */
-APP_FLASH_TEXT_SECTION void *__wrap__realloc_r(struct _reent *ptr, void *mem, size_t newsize)
-{
-    /* realloc(ptr, 0) is equivalent to free(ptr) */
-    if (!newsize)
-    {
-        if (mem)
-        {
-            os_mem_free(mem);
-        }
-        return NULL;
-    }
-
-    /* realloc(NULL, size) is equivalent to malloc(size) */
-    if (!mem)
-    {
-        return os_mem_alloc(RAM_TYPE_DATA_ON, newsize);
-    }
-
-    /*
-     * For mem != NULL && newsize != 0:
-     * Cannot safely resize existing allocation without knowing original size.
-     * Return NULL to indicate failure rather than risk memory corruption.
-     *
-     * If this causes issues, the caller should either:
-     * 1. Track allocation sizes internally (like mbedtls resize_buffer does)
-     * 2. Use explicit alloc+copy+free with known sizes
-     * 3. Avoid realloc and use fixed-size allocations
-     */
-    return NULL;
-}
-
-APP_FLASH_TEXT_SECTION void *__wrap__calloc_r(struct _reent *ptr, size_t size, size_t len)
-{
-    void *mem;
-    mem = os_mem_zalloc(RAM_TYPE_DATA_ON, (size * len));
-    return mem;
-}
+// The newlib _r allocation wrappers now come from the SDK's
+// bsp/boot/rtl87x2g/system_rtl.c, which forwards them to the FreeRTOS heap.
+// That heap tracks each block's size, so its realloc can copy the correct
+// number of bytes; the os_mem based implementation that used to live here
+// could not, because os_mem offers no way to query an allocation's size.
