@@ -572,6 +572,14 @@ void uart_send(const uint8_t *aBuf, uint16_t aBufLength)
 
 otError otPlatUartSend(const uint8_t *aBuf, uint16_t aBufLength)
 {
+    if (!usb_uart_ready)
+    {
+        // Reporting success here would make the caller believe the frame was
+        // queued, and it would never get a matching otPlatUartSendDone().
+        otLogInfoPlat("%s !usb_uart_ready", __func__);
+        return OT_ERROR_INVALID_STATE;
+    }
+
     uart_send(aBuf, aBufLength);
     sTransmitDone = true;
     BEE_EventSend(UART_TX, 0);

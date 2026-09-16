@@ -47,10 +47,8 @@
 #include "zb_tst_cfg.h"
 #include "dbg_printf.h"
 #include "mem_config.h"
+#include "threading_alt.h"
 #include "crypto_hw_locks.h"
-
-// Forward declaration from mbedtls threading_alt
-extern void mbedtls_threading_alt_init(void);
 
 /** @addtogroup  MAC_TASK_DEMO
     * @{

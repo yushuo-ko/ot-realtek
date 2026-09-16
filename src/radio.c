@@ -193,12 +193,12 @@ typedef struct
     };
 
 #if defined(WAIT_ACK_TX_DONE_EN) && (WAIT_ACK_TX_DONE_EN == 1)
-    mac_timer_handle_t *sWaitAckTxDoneTimer;
+    mac_timer_handle_t sWaitAckTxDoneTimer;
     //volatile uint64_t sWaitAckTxDoneTimestamp; // To prevent the timer from not executing correctly
 #endif
 
 #if defined(DLPS_EN) && (DLPS_EN == 1)
-    mac_timer_handle_t *sWaitRxPendingDataTimer;
+    mac_timer_handle_t sWaitRxPendingDataTimer;
     //volatile uint64_t sWaitRxPendingDataTimestamp; // To prevent the timer from not executing correctly
 #endif
     //volatile uint64_t sWaitScheduledRxWindowTimestamp;
@@ -215,6 +215,7 @@ typedef struct
     rx_item_t ack_item;
     bool ack_fp;
     bool ack_receive_done;
+    bool ack_receive_pending;
 
     volatile bool tx_backoff_tmo;
     volatile uint64_t tx_backoff_pending;
@@ -419,27 +420,22 @@ void startWaitAckTxDoneProtection(uint8_t pan_idx, uint64_t ackEndTime, uint32_t
         return;
     }
 
-    if (radio_inst[pan_idx].sWaitAckTxDoneTimer)
+    uint32_t diff = ackEndTime - now;
+    if (diff < 20)
     {
-        uint32_t diff = ackEndTime - now;
-
-        if (diff < 20)
-        {
-            diff = 20;
-        }
-
-        mac_SoftwareTimer_Start(radio_inst[pan_idx].sWaitAckTxDoneTimer,
-                                mac_GetCurrentBTUS() + diff,
-                                waitAckTxDoneProtectionTimeout,
-                                (void *)(uint32_t)pan_idx);
+        diff = 20;
     }
+
+    mac_SoftwareTimer_Start(&radio_inst[pan_idx].sWaitAckTxDoneTimer,
+                            mac_GetCurrentBTUS() + diff,
+                            waitAckTxDoneProtectionTimeout,
+                            (void *)(uint32_t)pan_idx);
     //radio_inst[pan_idx].sWaitAckTxDoneTimestamp = ackEndTime;
 #endif
 }
 
 static void dataInit(uint8_t pan_idx)
 {
-    uint32_t s;
     os_sem_create(&radio_inst[pan_idx].radio_done, "radio_done", 0, 1);
     radio_inst[pan_idx].sDisabled = true;
     radio_inst[pan_idx].sStayAwake_b.appForceStayAwake = true;
@@ -455,26 +451,6 @@ static void dataInit(uint8_t pan_idx)
 
     pm_init();
 
-#if defined(DLPS_EN) && (DLPS_EN == 1)
-    s = os_lock();
-    radio_inst[pan_idx].sWaitRxPendingDataTimer = mac_SoftwareTimer_Alloc();
-    os_unlock(s);
-    if (!radio_inst[pan_idx].sWaitRxPendingDataTimer)
-    {
-        otLogWarnPlat("sWaitRxPendingDataTimer alloc fail");
-    }
-#endif
-
-#if defined(WAIT_ACK_TX_DONE_EN) && (WAIT_ACK_TX_DONE_EN == 1)
-    s = os_lock();
-    radio_inst[pan_idx].sWaitAckTxDoneTimer = mac_SoftwareTimer_Alloc();
-    os_unlock(s);
-    if (!radio_inst[pan_idx].sWaitAckTxDoneTimer)
-    {
-        otLogWarnPlat("sWaitAckTxDoneTimer alloc fail");
-    }
-#endif
-
 #ifdef _IS_FPGA_
 #else
     hw_sha256(get_ic_euid(), 14, sha256_output, 0);
@@ -483,23 +459,12 @@ static void dataInit(uint8_t pan_idx)
 
 static void dataDeinit(uint8_t pan_idx)
 {
-    uint32_t s;
     otLogInfoPlat("%s %d", __func__, pan_idx);
 #if defined(WAIT_ACK_TX_DONE_EN) && (WAIT_ACK_TX_DONE_EN == 1)
-    if (radio_inst[pan_idx].sWaitAckTxDoneTimer)
-    {
-        s = os_lock();
-        mac_SoftwareTimer_Free(radio_inst[pan_idx].sWaitAckTxDoneTimer);
-        os_unlock(s);
-    }
+    mac_SoftwareTimer_Stop(&radio_inst[pan_idx].sWaitAckTxDoneTimer);
 #endif
 #if defined(DLPS_EN) && (DLPS_EN == 1)
-    if (radio_inst[pan_idx].sWaitRxPendingDataTimer)
-    {
-        s = os_lock();
-        mac_SoftwareTimer_Free(radio_inst[pan_idx].sWaitRxPendingDataTimer);
-        os_unlock(s);
-    }
+    mac_SoftwareTimer_Stop(&radio_inst[pan_idx].sWaitRxPendingDataTimer);
 #endif
     os_sem_delete(radio_inst[pan_idx].radio_done);
 }
@@ -817,7 +782,7 @@ void setChannel(otRadioFrame *aTxFrame, uint8_t aChannel, uint8_t pan_idx)
 
 #if defined(WAIT_ACK_TX_DONE_EN) && (WAIT_ACK_TX_DONE_EN == 1)
         // wait for tx ack transmit completed
-        while (mac_SoftwareTimer_IsRunning(radio_inst[pan_idx].sWaitAckTxDoneTimer))
+        while (mac_SoftwareTimer_IsRunning(&radio_inst[pan_idx].sWaitAckTxDoneTimer))
         {
             otLogWarnPlat("Warning: Attempt to change channel during pending ACK transmission");
         }
@@ -1890,12 +1855,24 @@ void BEE_RadioTx(otInstance *aInstance, uint8_t pan_idx)
                     aAckFrame = &radio_inst[pan_idx].ack_item.sReceivedFrames;
                 }
 #if defined(DLPS_EN) && (DLPS_EN == 1)
-                if (p_fc->pending == 1 && radio_inst[pan_idx].sWaitRxPendingDataTimer)
+                if (p_fc->pending == 1)
                 {
                     radio_inst[pan_idx].sStayAwake_b.waitRxPendingData = 1;
-                    mac_SoftwareTimer_Start(radio_inst[pan_idx].sWaitRxPendingDataTimer,
+                    mac_SoftwareTimer_Start(&radio_inst[pan_idx].sWaitRxPendingDataTimer,
                                             mac_GetCurrentBTUS() + OPENTHREAD_CONFIG_MAC_DATA_POLL_TIMEOUT * 1000,
                                             waitRxPendingDataTimeout, (void *)(uint32_t)pan_idx);
+                }
+                else
+                {
+                    /* The parent has no pending data for us, so there is nothing left to
+                       receive after this ACK. On a sleepy end device that is not keeping
+                       the receiver on, turn the radio off now instead of waiting for the
+                       next sleep decision. */
+                    if (!radio_inst[pan_idx].sStayAwake_b.rxOnWhenIdle &&
+                        zbpm_adap.power_mode == ZBMAC_DEEP_SLEEP)
+                    {
+                        mac_RadioOff();
+                    }
                 }
                 //radio_inst[pan_idx].sWaitRxPendingDataTimestamp = otPlatTimeGet() + OPENTHREAD_CONFIG_MAC_DATA_POLL_TIMEOUT * 1000;
 #endif
@@ -2571,6 +2548,10 @@ APP_RAM_TEXT_SECTION void txn_handler(uint8_t pan_idx, uint32_t txn_trig)
                 {
                     if (txn_trig & (1 << ACK_TYPE_OFFSET))
                     {
+                        // Enhanced ACK: the frame arrives separately via
+                        // rxdone_handler, so record that the next received frame
+                        // belongs to this transmission.
+                        radio_inst[pan_idx].ack_receive_pending = true;
                     }
                     else
                     {
@@ -2773,10 +2754,7 @@ void mac_report_enhack_transmit_done(uint8_t pan_idx)
     }
 
 #if defined(WAIT_ACK_TX_DONE_EN) && (WAIT_ACK_TX_DONE_EN == 1)
-    if (radio_inst[pan_idx].sWaitAckTxDoneTimer)
-    {
-        mac_SoftwareTimer_Stop(radio_inst[pan_idx].sWaitAckTxDoneTimer);
-    }
+    mac_SoftwareTimer_Stop(&radio_inst[pan_idx].sWaitAckTxDoneTimer);
 
     if (radio_inst[pan_idx].sStayAwake_b.waitAckTxDone)
     {
@@ -2794,15 +2772,18 @@ APP_RAM_TEXT_SECTION void rxdone_handler(uint8_t pan_idx, uint32_t arg)
     uint8_t bt_channel;
     int8_t rssi;
     uint8_t lqi;
-    uint32_t frame_type = mac_GetRxFrmType();
 #if defined(RT_PLATFORM_RTL87X3G) || defined(RT_PLATFORM_RTL8922D)
     uint8_t *buf = (uint8_t *)arg;
 #else
     uint8_t *buf = NULL;
 #endif
 
-    if (FRAME_TYPE_ACK == frame_type)
+    // Only treat this frame as our enhanced ACK when txn_handler actually armed
+    // one. Keying off the received frame type alone also matches an ACK that is
+    // not a response to our transmission, which would report the wrong result.
+    if (radio_inst[pan_idx].ack_receive_pending)
     {
+        radio_inst[pan_idx].ack_receive_pending = false;
         mac_Rx(radio_inst[pan_idx].ack_item.sReceivedPsdu);
         radio_inst[pan_idx].ack_receive_done = true;
     }
@@ -2877,7 +2858,10 @@ APP_RAM_TEXT_SECTION void handle_tx_backoff_pending(uint8_t pan_idx)
         if (radio_inst[pan_idx].tx_backoff_pending < now + kMinScheduleAdvanceUs)
         {
             radio_inst[pan_idx].tx_backoff_pending = 0;
-            BEE_EventSend(TX_START, pan_idx);
+            // Go through tx_backoff_tmo so the backoff expiry takes the same path
+            // as BEE_RadioBackoffTimeout, which starts the transmission from task
+            // context rather than from this interrupt.
+            radio_inst[pan_idx].tx_backoff_tmo = true;
             if (pan_idx == 0) { otSysEventSignalPending(); }
             else { zbSysEventSignalPending(); }
         }
