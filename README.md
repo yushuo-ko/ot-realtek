@@ -1,6 +1,7 @@
-# OpenThread on Realtek RTL8777G Example
+# OpenThread on Realtek RTL87X2G Example
 
-This repo contains example platform drivers for the [Realtek RTL8777G][RTL8777G].
+This repo contains example platform drivers for the Realtek RTL87X2G family:
+the [RTL8777G][RTL8777G] EVB and the RTL8771GUV and RTL8771GTV USB dongles.
 
 [RTL8777G]: https://www.realtek.com/
 
@@ -20,6 +21,20 @@ In a Bash terminal, follow these instructions to build the RTL8777G examples.
 $ cd <path-to-ot-realtek>
 $ OT_CMAKE_NINJA_TARGET="ot-cli-ftd" ./script/build rtl87x2g sdk rtl8777g
 ```
+
+### Building the RCP
+
+The `ot-rcp` target builds a Radio Co-Processor image for use with a host
+running `otbr-agent` or `ot-daemon`. Select the board with the last argument:
+
+```bash
+$ cd <path-to-ot-realtek>
+$ OT_CMAKE_NINJA_TARGET="ot-rcp" ./script/build rtl87x2g sdk rtl8771guv
+```
+
+Supported RCP board targets are `rtl8771guv` and `rtl8771gtv` for the USB
+dongles, and `rtl8777g` for the EVB. The resulting image exposes a USB CDC ACM
+serial port, so the host connects to it over spinel-over-HDLC.
 
 ## Flash Binaries
 

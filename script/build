@@ -182,7 +182,9 @@ main()
             ot-rcp)
                 cd ${OT_SRCDIR}/openthread && git checkout 2aeb8b8 && cd ${OT_SRCDIR}
                 options+=("-DCMAKE_TOOLCHAIN_FILE=src/${platform}/arm-none-eabi.cmake")
-                options+=("-DENABLE_CLI=OFF -DOT_DNSSD_SERVER=ON -DOT_SRP_SERVER=ON")
+                options+=("-DENABLE_CLI=OFF")
+                options+=("-DOT_DNSSD_SERVER=ON")
+                options+=("-DOT_SRP_SERVER=ON")
                 options+=("-DOT_NCP_VENDOR_HOOK_SOURCE=$PWD/src/${platform}/example_vendor_hook.cpp")
                 ;;
             *)
@@ -221,7 +223,8 @@ main()
                         cd ${OT_SRCDIR}/openthread && git checkout 2aeb8b8 && cd ${OT_SRCDIR}
                         ;;
                 esac
-                options+=("-DOT_DNSSD_SERVER=ON -DOT_SRP_SERVER=ON")
+                options+=("-DOT_DNSSD_SERVER=ON")
+                options+=("-DOT_SRP_SERVER=ON")
                 ;;
             *)
                 ;;

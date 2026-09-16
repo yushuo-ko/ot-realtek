@@ -34,7 +34,11 @@
 #ifndef OPENTHREAD_CORE_RTL8771GUV_RCP_CONFIG_H_
 #define OPENTHREAD_CORE_RTL8771GUV_RCP_CONFIG_H_
 
-#define FEATURE_SUPPORT_RTK_SIGN 1
-#define FEATURE_SUPPORT_CFU 1
+/* Image signing and CFU (Component Firmware Update) are built from
+ * src/rtl87x2g/internal/ and the SDK's subsys/cfu, neither of which is part of
+ * the public tree, so they are disabled here. Set these to 1 when building
+ * against an SDK that provides them. */
+#define FEATURE_SUPPORT_RTK_SIGN 0
+#define FEATURE_SUPPORT_CFU 0
 
 #endif // OPENTHREAD_CORE_RTL8771GUV_RCP_CONFIG_H_
