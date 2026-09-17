@@ -78,10 +78,15 @@ else()
     set(RTL87X2G_INTERNAL_LIB "${REALTEK_SDK_ROOT}/lib/rtl87x2g/librtl87x2g-internal.a")
 endif()
 
+# The SDK's librtl87x2g-internal.a and the peripheral driver library reference
+# each other: on the boards whose internal library carries the PTA pin-mux code,
+# it calls GPIO_*/RCC_* from rtl87x2g-peripheral. A single left-to-right pass
+# cannot resolve that, so wrap the group in --start-group/--end-group.
 target_link_libraries(openthread-rtl87x2g
     PRIVATE
         ${OT_MBEDTLS}
         ot-config
+        -Wl,--start-group
         rtl87x2g-peripheral
         "${REALTEK_SDK_ROOT}/subsys/usb/usb_lib/lib/rtl87x2g/gcc/libusb.a"
         "${REALTEK_SDK_ROOT}/subsys/usb/usb_hal/lib/rtl87x2g/gcc/libusb_hal.a"
@@ -93,6 +98,7 @@ target_link_libraries(openthread-rtl87x2g
         "${REALTEK_SDK_ROOT}/bin/rtl87x2g/rom_lib/libROM_NS.a"
         "${REALTEK_SDK_ROOT}/bin/rtl87x2g/rom_lib/ROM_CMSE_Lib.o"
         "${REALTEK_SDK_ROOT}/bin/rtl87x2g/rom_lib/liblowerstack.a"
+        -Wl,--end-group
 )
 
 target_link_options(openthread-rtl87x2g

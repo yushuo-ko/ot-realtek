@@ -180,12 +180,16 @@ main()
                           "-DOT_SLAAC=ON")
                 ;;
             ot-rcp)
-                cd ${OT_SRCDIR}/openthread && git checkout 2aeb8b8 && cd ${OT_SRCDIR}
+                cd ${OT_SRCDIR}/openthread && \
+                    git reset --hard HEAD && \
+                    git clean -f -d && \
+                    git checkout 2aeb8b8 && \
+                    cd ${OT_SRCDIR}
                 options+=("-DCMAKE_TOOLCHAIN_FILE=src/${platform}/arm-none-eabi.cmake")
                 options+=("-DENABLE_CLI=OFF")
                 options+=("-DOT_DNSSD_SERVER=ON")
                 options+=("-DOT_SRP_SERVER=ON")
-                options+=("-DOT_NCP_VENDOR_HOOK_SOURCE=$PWD/src/${platform}/example_vendor_hook.cpp")
+                options+=("-DOT_NCP_VENDOR_HOOK_SOURCE=${OT_SRCDIR}/src/${platform}/example_vendor_hook.cpp")
                 ;;
             *)
                 ;;
@@ -211,7 +215,7 @@ main()
             ot-rcp)
                 case "${board_target}" in
                     rtl8771htv)
-                        options+=("-DOT_NCP_VENDOR_HOOK_SOURCE=$PWD/src/${platform}/example_vendor_hook.cpp")
+                        options+=("-DOT_NCP_VENDOR_HOOK_SOURCE=${OT_SRCDIR}/src/${platform}/example_vendor_hook.cpp")
                         cd ${OT_SRCDIR}/openthread && \
                             git reset --hard HEAD && \
                             git clean -f -d && \
