@@ -43,6 +43,8 @@
 
 
 
+namespace
+{
 uint8_t mode;
 uint32_t vid = 0x0BDA;
 uint32_t pid = 0x8777;
@@ -50,6 +52,7 @@ char str[60];
 IMG_ID image_id;
 T_IMAGE_VERSION current_image_ver = {0};
 uint32_t active_bank_image_size = 0;
+} // namespace
 
 
 namespace ot
@@ -148,8 +151,7 @@ otError NcpBase::VendorGetPropertyHandler(spinel_prop_key_t aPropKey)
         }
         else
         {
-            snprintf(str, sizeof(str), "no app data1");
-            error = mEncoder.WriteUtf8((const char *)str);
+            error = mEncoder.WriteUtf8("no app data1");
         }
         break;
 
@@ -203,6 +205,8 @@ otError NcpBase::VendorSetPropertyHandler(spinel_prop_key_t aPropKey)
     // as unsupported rather than silently returning success.
     case SPINEL_PROP_VENDOR_RTK_READ_REGISTER:
     case SPINEL_PROP_VENDOR_RTK_WRITE_REGISTER:
+    case SPINEL_PROP_VENDOR_RTK_CONFIG_WTITE:
+    case SPINEL_PROP_VENDOR_RTK_FLOW_CONTROL:
         error = OT_ERROR_NOT_FOUND;
         break;
 
